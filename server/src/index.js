@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const session = require("express-session");
+const cookieSession = require("cookie-session");
 
 require("./db"); // ensures schema is created on boot
 if (process.env.VERCEL) require("./seed"); // fresh /tmp DB on each cold start needs demo data + admin login
@@ -16,17 +16,17 @@ app.use(
     credentials: true,
   })
 );
+// Sessions live in a signed cookie, not server memory: on Vercel each request can hit a
+// different serverless instance, so an in-memory session store forgets the login.
+app.set("trust proxy", 1);
 app.use(
-  session({
+  cookieSession({
+    name: "wc_session",
     secret: process.env.SESSION_SECRET || "willow-creek-dev-secret-change-me",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: false, // set true when served over HTTPS in production
-      maxAge: 1000 * 60 * 60 * 8, // 8 hours
-    },
+    httpOnly: true,
+    sameSite: "lax",
+    secure: !!process.env.VERCEL,
+    maxAge: 1000 * 60 * 60 * 8, // 8 hours
   })
 );
 

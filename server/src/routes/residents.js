@@ -5,6 +5,8 @@ const { requireAuth, requireAdmin } = require("../auth");
 const { logAction } = require("../audit");
 const { getValuesForRecord, setValuesForRecord } = require("../customFields");
 const screeningsRouter = require("./screenings");
+const { houseToday } = require("../time");
+const { COUNTED_REQUIRED, requiredStats, addDays } = require("../meetingSchedule");
 
 router.use(requireAuth);
 
@@ -107,7 +109,36 @@ router.get("/:id", (req, res) => {
     )
     .all(req.params.id);
 
-  res.json({ ...resident, checkins, notes, payments, screenings, tasks, customFields, meetings });
+  // Required (house) meetings this resident missed, with excusal status.
+  const today = houseToday();
+  const missedRequired = db
+    .prepare(
+      `SELECT m.id as meeting_id, m.title, m.meeting_type, m.meeting_date, m.start_time,
+              e.reason as excusal_reason, es.name as excused_by_name
+       FROM meetings m
+       JOIN residents r ON r.id = @rid
+       LEFT JOIN meeting_excusals e ON e.meeting_id = m.id AND e.resident_id = r.id
+       LEFT JOIN staff es ON es.id = e.recorded_by
+       WHERE ${COUNTED_REQUIRED}
+         AND NOT EXISTS (SELECT 1 FROM meeting_attendance a WHERE a.meeting_id = m.id AND a.resident_id = r.id)
+       ORDER BY m.meeting_date DESC
+       LIMIT 100`
+    )
+    .all({ rid: resident.id, today });
+  const [stats30] = requiredStats(addDays(today, -29), today, "r.id = @rid", { rid: resident.id });
+
+  res.json({
+    ...resident,
+    checkins,
+    notes,
+    payments,
+    screenings,
+    tasks,
+    customFields,
+    meetings,
+    missedRequired,
+    requiredStats30: stats30,
+  });
 });
 
 router.post("/", (req, res) => {

@@ -3,6 +3,7 @@ const cors = require("cors");
 const session = require("express-session");
 
 require("./db"); // ensures schema is created on boot
+if (process.env.VERCEL) require("./seed"); // fresh /tmp DB on each cold start needs demo data + admin login
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -39,6 +40,10 @@ app.use("/api/audit-log", require("./routes/auditLog"));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
-app.listen(PORT, () => {
-  console.log(`Willow Creek CRM server running on http://localhost:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Willow Creek CRM server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

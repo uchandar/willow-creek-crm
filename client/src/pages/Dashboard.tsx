@@ -46,7 +46,23 @@ export default function Dashboard() {
           accent={summary.overdueTasks > 0 ? "warn" : undefined}
         />
         <StatCard
-          label="Pending screenings"
+          label="Med doses still due today"
+          value={summary.dosesOutstanding}
+          accent={summary.dosesOutstanding > 0 ? "warn" : "good"}
+        />
+        <StatCard
+          label="Missed / refused doses today"
+          value={summary.missedDosesToday}
+          accent={summary.missedDosesToday > 0 ? "warn" : undefined}
+        />
+        <StatCard
+          label="Pill count discrepancies (7 days)"
+          value={summary.pillCountDiscrepancies}
+          accent={summary.pillCountDiscrepancies > 0 ? "warn" : undefined}
+        />
+        <StatCard label="Meeting check-ins today" value={summary.meetingAttendanceToday} />
+        <StatCard
+          label="Pending drug tests"
           value={summary.pendingScreenings}
           accent={summary.pendingScreenings > 0 ? "warn" : undefined}
         />

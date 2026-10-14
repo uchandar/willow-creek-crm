@@ -21,14 +21,16 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  const { test_date, panel, result, substances_flagged, notes } = req.body || {};
+  const { test_date, panel, result, substances_flagged, notes, specimen_type } = req.body || {};
+  const validSpecimens = ["urine", "saliva", "breath", "blood", "hair"];
+  const specimen = validSpecimens.includes(specimen_type) ? specimen_type : "urine";
   const validResults = ["pending", "negative", "positive", "inconclusive", "refused"];
   const resultValue = validResults.includes(result) ? result : "pending";
   const insert = db
     .prepare(
       `INSERT INTO drug_screenings
-       (resident_id, test_date, panel, result, substances_flagged, administered_by, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       (resident_id, test_date, panel, result, substances_flagged, administered_by, notes, specimen_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       req.params.residentId,
@@ -37,14 +39,15 @@ router.post("/", (req, res) => {
       resultValue,
       resultValue === "positive" ? substances_flagged || null : null,
       req.session.staffId,
-      notes || null
+      notes || null,
+      specimen
     );
   logAction({
     staffId: req.session.staffId,
     action: "create",
     entity: "drug_screening",
     entityId: insert.lastInsertRowid,
-    summary: `Logged a ${resultValue} drug screening for resident #${req.params.residentId}`,
+    summary: `Logged a ${resultValue} ${specimen} drug screening for resident #${req.params.residentId}`,
   });
   res.status(201).json({ id: insert.lastInsertRowid });
 });

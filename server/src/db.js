@@ -139,6 +139,98 @@ CREATE TABLE IF NOT EXISTS audit_log (
   summary TEXT NOT NULL,      -- human-readable description
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Meetings (AA/NA/house meetings, etc.) and QR-based attendance.
+CREATE TABLE IF NOT EXISTS meetings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  meeting_type TEXT NOT NULL DEFAULT 'house', -- house | aa | na | smart | other
+  meeting_date TEXT NOT NULL DEFAULT (date('now')),
+  start_time TEXT,
+  location TEXT,
+  created_by INTEGER REFERENCES staff(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS meeting_attendance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  resident_id INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
+  method TEXT NOT NULL DEFAULT 'qr', -- qr | manual
+  recorded_by INTEGER REFERENCES staff(id),
+  checked_in_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(meeting_id, resident_id)
+);
+
+-- Medications: prescription list, dose log (MAR-style), pill counts.
+CREATE TABLE IF NOT EXISTS medications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  resident_id INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  dose TEXT,                 -- e.g. "50 mg"
+  route TEXT DEFAULT 'oral',
+  frequency TEXT,            -- e.g. "Twice daily"
+  times_per_day INTEGER,     -- used for today's dose progress
+  units_per_dose INTEGER NOT NULL DEFAULT 1,
+  prescriber TEXT,
+  pharmacy TEXT,
+  rx_number TEXT,
+  start_date TEXT,
+  end_date TEXT,
+  is_controlled INTEGER NOT NULL DEFAULT 0,
+  quantity_on_hand INTEGER,  -- null = not tracked
+  instructions TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES staff(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS medication_doses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  resident_id INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'taken', -- taken | missed | refused | held
+  dose_time TEXT NOT NULL DEFAULT (datetime('now')),
+  observed_by INTEGER REFERENCES staff(id),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pill_counts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  resident_id INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
+  count_date TEXT NOT NULL DEFAULT (datetime('now')),
+  kind TEXT NOT NULL DEFAULT 'count', -- count | refill
+  expected_count INTEGER,
+  actual_count INTEGER NOT NULL,
+  discrepancy INTEGER NOT NULL DEFAULT 0,
+  counted_by INTEGER REFERENCES staff(id),
+  witness_name TEXT,
+  notes TEXT
+);
 `);
+
+// Lightweight migrations for databases created before these columns existed.
+function addColumnIfMissing(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+addColumnIfMissing("residents", "qr_token", "TEXT");
+addColumnIfMissing("drug_screenings", "specimen_type", "TEXT NOT NULL DEFAULT 'urine'");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_residents_qr_token ON residents(qr_token)");
+
+// Every resident gets an opaque QR token (no name or PHI encoded in the badge).
+const crypto = require("crypto");
+function newQrToken() {
+  return crypto.randomBytes(12).toString("hex");
+}
+const missing = db.prepare("SELECT id FROM residents WHERE qr_token IS NULL").all();
+const setToken = db.prepare("UPDATE residents SET qr_token = ? WHERE id = ?");
+for (const r of missing) setToken.run(newQrToken(), r.id);
+
+db.newQrToken = newQrToken;
 
 module.exports = db;

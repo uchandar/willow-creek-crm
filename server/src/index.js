@@ -37,6 +37,8 @@ app.use("/api/dashboard", require("./routes/dashboard"));
 app.use("/api/custom-fields", require("./routes/customFields"));
 app.use("/api/tasks", require("./routes/tasks"));
 app.use("/api/audit-log", require("./routes/auditLog"));
+app.use("/api/meetings", require("./routes/meetings"));
+app.use("/api/medications", require("./routes/medPass"));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

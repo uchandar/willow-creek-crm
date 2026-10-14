@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type DashboardSummary } from "../api";
+import { api, fmtDate, fmtTime, type DashboardSummary } from "../api";
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -20,6 +20,20 @@ export default function Dashboard() {
     <div>
       <h1>Dashboard</h1>
       <p className="muted">Today at a glance.</p>
+
+      {summary.nextHouseMeeting && (
+        <Link to={`/meetings/${summary.nextHouseMeeting.id}`} className="card next-meeting">
+          <div>
+            <div className="stat-label">Next house meeting</div>
+            <div className="next-meeting-title">
+              {summary.nextHouseMeeting.title} · {fmtDate(summary.nextHouseMeeting.meeting_date, { weekday: "long", month: "short", day: "numeric" })}
+              {summary.nextHouseMeeting.start_time ? ` at ${fmtTime(summary.nextHouseMeeting.start_time)}` : ""}
+            </div>
+            {summary.nextHouseMeeting.location && <div className="muted small">{summary.nextHouseMeeting.location}</div>}
+          </div>
+          <span className="btn-primary btn-sm">Open check-in</span>
+        </Link>
+      )}
 
       <div className="stat-grid">
         <StatCard label="Active residents" value={summary.activeResidents} />
@@ -61,6 +75,16 @@ export default function Dashboard() {
           accent={summary.pillCountDiscrepancies > 0 ? "warn" : undefined}
         />
         <StatCard label="Meeting check-ins today" value={summary.meetingAttendanceToday} />
+        <StatCard
+          label="Unexcused meeting absences (7 days)"
+          value={summary.unexcusedAbsences7d}
+          accent={summary.unexcusedAbsences7d > 0 ? "warn" : "good"}
+        />
+        <StatCard
+          label="House meetings needing minutes / attendance"
+          value={summary.minutesPending}
+          accent={summary.minutesPending > 0 ? "warn" : undefined}
+        />
         <StatCard
           label="Pending drug tests"
           value={summary.pendingScreenings}

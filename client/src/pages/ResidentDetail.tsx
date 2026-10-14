@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { api, fmtUtc, MEETING_TYPES, type ResidentDetail, type CustomFieldDef } from "../api";
+import { api, fmtDate, fmtUtc, MEETING_TYPES, type ResidentDetail, type CustomFieldDef } from "../api";
 import CustomFieldsForm from "../CustomFieldsForm";
 import { useAuth } from "../AuthContext";
 import QrCode, { badgePayload } from "../QrCode";
@@ -102,7 +102,7 @@ export default function ResidentDetailPage() {
       </div>
 
       {tab === "checkins" && <CheckInsPanel residentId={resident.id} checkins={resident.checkins} onChange={load} />}
-      {tab === "meetings" && <MeetingsPanel meetings={resident.meetings || []} />}
+      {tab === "meetings" && <MeetingsPanel resident={resident} />}
       {tab === "medications" && <MedicationsPanel residentId={resident.id} />}
       {tab === "screenings" && (
         <ScreeningsPanel residentId={resident.id} screenings={resident.screenings} onChange={load} />
@@ -171,16 +171,89 @@ function QrBadgeCard({ resident, onChange }: { resident: ResidentDetail; onChang
   );
 }
 
-function MeetingsPanel({ meetings }: { meetings: ResidentDetail["meetings"] }) {
+function MeetingsPanel({ resident }: { resident: ResidentDetail }) {
+  const meetings = resident.meetings || [];
+  const missed = resident.missedRequired || [];
+  const stats = resident.requiredStats30;
+  const pct = stats && stats.required_total ? Math.round((stats.required_attended / stats.required_total) * 100) : null;
   const last30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const recent = meetings.filter((m) => m.meeting_date >= last30);
+  const outside30 = meetings.filter((m) => m.meeting_date >= last30 && m.meeting_type !== "house").length;
+  const unexcused = missed.filter((m) => !m.excusal_reason);
+
+  async function excuse(meetingId: number) {
+    const reason = prompt("Reason this absence is excused:");
+    if (!reason || !reason.trim()) return;
+    await api.post(`/meetings/${meetingId}/excusals`, { resident_id: resident.id, reason });
+    window.location.reload();
+  }
+
   return (
     <div>
+      <div className="stat-grid compact">
+        <div className={`stat-card ${pct !== null && pct < 75 ? "stat-warn" : pct === 100 ? "stat-good" : ""}`}>
+          <div className="stat-value">{stats ? `${stats.required_attended}/${stats.required_total}` : "—"}</div>
+          <div className="stat-label">Required meetings attended (30 days){pct !== null ? ` · ${pct}%` : ""}</div>
+        </div>
+        <div className={`stat-card ${stats && stats.unexcused > 0 ? "stat-warn" : ""}`}>
+          <div className="stat-value">{stats?.unexcused ?? 0}</div>
+          <div className="stat-label">Unexcused absences (30 days)</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{outside30}</div>
+          <div className="stat-label">AA / NA / outside meetings (30 days)</div>
+        </div>
+      </div>
+
+      {missed.length > 0 && (
+        <>
+          <h3>Missed required meetings</h3>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Meeting</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {missed.map((m) => (
+                <tr key={m.meeting_id}>
+                  <td>{fmtDate(m.meeting_date)}</td>
+                  <td>
+                    <Link to={`/meetings/${m.meeting_id}`}>{m.title}</Link>
+                  </td>
+                  <td>
+                    {m.excusal_reason ? (
+                      <>
+                        <span className="tag tag-general">excused</span> <span className="small">{m.excusal_reason}</span>
+                      </>
+                    ) : (
+                      <span className="tag tag-ci-flagged">unexcused</span>
+                    )}
+                  </td>
+                  <td>
+                    {!m.excusal_reason && (
+                      <button className="btn-link small" onClick={() => excuse(m.meeting_id)}>
+                        Excuse
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {unexcused.length >= 2 && (
+            <p className="warn-text small">
+              {unexcused.length} unexcused absences on record — consider a case note or follow-up task.
+            </p>
+          )}
+        </>
+      )}
+
+      <h3 style={{ marginTop: 18 }}>Attendance history</h3>
       <p className="muted small">
-        {recent.length} meeting{recent.length === 1 ? "" : "s"} in the last 30 days (
-        {recent.filter((m) => m.meeting_type === "house").length} house,{" "}
-        {recent.filter((m) => m.meeting_type !== "house").length} outside). Check residents in from the{" "}
-        <Link to="/meetings">Meetings</Link> page.
+        Check residents in from the <Link to="/calendar">calendar</Link> or <Link to="/meetings">Meetings</Link> page.
       </p>
       <table className="table">
         <thead>
@@ -195,7 +268,7 @@ function MeetingsPanel({ meetings }: { meetings: ResidentDetail["meetings"] }) {
         <tbody>
           {meetings.map((m) => (
             <tr key={m.id}>
-              <td>{m.meeting_date}</td>
+              <td>{fmtDate(m.meeting_date)}</td>
               <td>
                 <Link to={`/meetings/${m.meeting_id}`}>{m.title}</Link>
               </td>

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
-const { requireAuth } = require("../auth");
+const { requireAuth, requireAdmin } = require("../auth");
 const { logAction } = require("../audit");
 const { getValuesForRecord, setValuesForRecord } = require("../customFields");
 const screeningsRouter = require("./screenings");
@@ -94,7 +94,20 @@ router.get("/:id", (req, res) => {
 
   const customFields = getValuesForRecord("resident", resident.id);
 
-  res.json({ ...resident, checkins, notes, payments, screenings, tasks, customFields });
+  const meetings = db
+    .prepare(
+      `SELECT a.id, a.method, a.checked_in_at, m.id as meeting_id, m.title, m.meeting_type,
+              m.meeting_date, s.name as recorded_by_name
+       FROM meeting_attendance a
+       JOIN meetings m ON m.id = a.meeting_id
+       LEFT JOIN staff s ON s.id = a.recorded_by
+       WHERE a.resident_id = ?
+       ORDER BY m.meeting_date DESC, a.checked_in_at DESC
+       LIMIT 100`
+    )
+    .all(req.params.id);
+
+  res.json({ ...resident, checkins, notes, payments, screenings, tasks, customFields, meetings });
 });
 
 router.post("/", (req, res) => {
@@ -124,8 +137,8 @@ router.post("/", (req, res) => {
         `INSERT INTO residents
          (first_name, last_name, phone, email, emergency_contact_name,
           emergency_contact_phone, emergency_contact_relation, referral_source,
-          intake_date, bed_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+          intake_date, bed_id, status, qr_token)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
       )
       .run(
         first_name,
@@ -137,7 +150,8 @@ router.post("/", (req, res) => {
         emergency_contact_relation || null,
         referral_source || null,
         intake_date,
-        bed_id || null
+        bed_id || null,
+        db.newQrToken()
       );
     const id = result.lastInsertRowid;
     setValuesForRecord("resident", id, custom_fields);
@@ -296,7 +310,25 @@ router.put("/:id/payments/:paymentId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Rotate a resident's QR badge (e.g. badge lost). Old badge stops working.
+router.post("/:id/qr/regenerate", requireAdmin, (req, res) => {
+  const r = db.prepare("SELECT first_name, last_name FROM residents WHERE id = ?").get(req.params.id);
+  if (!r) return res.status(404).json({ error: "Resident not found" });
+  const token = db.newQrToken();
+  db.prepare("UPDATE residents SET qr_token = ? WHERE id = ?").run(token, req.params.id);
+  logAction({
+    staffId: req.session.staffId,
+    action: "update",
+    entity: "resident",
+    entityId: Number(req.params.id),
+    summary: `Reissued QR badge for ${r.first_name} ${r.last_name}`,
+  });
+  res.json({ qr_token: token });
+});
+
 // Nested: /api/residents/:residentId/screenings
 router.use("/:residentId/screenings", screeningsRouter);
+// Nested: /api/residents/:residentId/medications
+router.use("/:residentId/medications", require("./medications"));
 
 module.exports = router;

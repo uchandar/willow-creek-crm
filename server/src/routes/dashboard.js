@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const { requireAuth } = require("../auth");
+const { houseDayStartUtc, houseToday } = require("../time");
 
 router.use(requireAuth);
 
@@ -53,7 +54,35 @@ router.get("/", (req, res) => {
     )
     .all();
 
+  const dayStart = houseDayStartUtc();
+  const dosesOutstanding = db
+    .prepare(
+      `SELECT COALESCE(SUM(MAX(0, md.times_per_day - (SELECT COUNT(*) FROM medication_doses d
+          WHERE d.medication_id = md.id AND d.status = 'taken' AND d.dose_time >= ?))), 0) as n
+       FROM medications md JOIN residents r ON r.id = md.resident_id
+       WHERE md.active = 1 AND r.status = 'active' AND md.times_per_day IS NOT NULL`
+    )
+    .get(dayStart).n;
+  const missedDosesToday = db
+    .prepare("SELECT COUNT(*) as n FROM medication_doses WHERE status IN ('missed','refused') AND dose_time >= ?")
+    .get(dayStart).n;
+  const pillCountDiscrepancies = db
+    .prepare(
+      "SELECT COUNT(*) as n FROM pill_counts WHERE kind = 'count' AND discrepancy <> 0 AND count_date >= datetime('now','-7 days')"
+    )
+    .get().n;
+  const meetingAttendanceToday = db
+    .prepare(
+      `SELECT COUNT(*) as n FROM meeting_attendance a JOIN meetings m ON m.id = a.meeting_id
+       WHERE m.meeting_date = ?`
+    )
+    .get(houseToday()).n;
+
   res.json({
+    dosesOutstanding,
+    missedDosesToday,
+    pillCountDiscrepancies,
+    meetingAttendanceToday,
     totalBeds,
     occupiedBeds,
     availableBeds: totalBeds - occupiedBeds,

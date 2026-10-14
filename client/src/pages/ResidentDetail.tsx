@@ -1,15 +1,30 @@
 import { Fragment, useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { api, type ResidentDetail, type CustomFieldDef } from "../api";
+import { useParams, Link, useSearchParams } from "react-router-dom";
+import { api, fmtUtc, MEETING_TYPES, type ResidentDetail, type CustomFieldDef } from "../api";
 import CustomFieldsForm from "../CustomFieldsForm";
+import { useAuth } from "../AuthContext";
+import QrCode, { badgePayload } from "../QrCode";
+import MedicationsPanel from "../MedicationsPanel";
+
+type Tab = "checkins" | "meetings" | "medications" | "screenings" | "notes" | "tasks" | "payments";
+const TABS: Array<[Tab, string]> = [
+  ["checkins", "Check-ins"],
+  ["meetings", "Meetings"],
+  ["medications", "Medications"],
+  ["screenings", "Drug tests"],
+  ["notes", "Case notes"],
+  ["tasks", "Tasks"],
+  ["payments", "Payments"],
+];
 
 export default function ResidentDetailPage() {
   const { id } = useParams();
   const [resident, setResident] = useState<ResidentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"checkins" | "screenings" | "notes" | "tasks" | "payments">(
-    "checkins"
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const tab: Tab = tabParam && TABS.some(([k]) => k === tabParam) ? tabParam : "checkins";
+  const setTab = (t: Tab) => setSearchParams(t === "checkins" ? {} : { tab: t }, { replace: true });
   const [fieldDefs, setFieldDefs] = useState<CustomFieldDef[]>([]);
 
   function load() {
@@ -72,36 +87,135 @@ export default function ResidentDetailPage() {
             <dd>{resident.emergency_contact_relation || "—"}</dd>
           </dl>
         </div>
+        <QrBadgeCard resident={resident} onChange={load} />
         {fieldDefs.length > 0 && (
           <CustomFieldsCard resident={resident} fieldDefs={fieldDefs} onChange={load} />
         )}
       </div>
 
       <div className="tab-row">
-        <button className={tab === "checkins" ? "tab-active" : ""} onClick={() => setTab("checkins")}>
-          Check-ins
-        </button>
-        <button className={tab === "screenings" ? "tab-active" : ""} onClick={() => setTab("screenings")}>
-          Drug screenings
-        </button>
-        <button className={tab === "notes" ? "tab-active" : ""} onClick={() => setTab("notes")}>
-          Case notes
-        </button>
-        <button className={tab === "tasks" ? "tab-active" : ""} onClick={() => setTab("tasks")}>
-          Tasks
-        </button>
-        <button className={tab === "payments" ? "tab-active" : ""} onClick={() => setTab("payments")}>
-          Payments
-        </button>
+        {TABS.map(([k, label]) => (
+          <button key={k} className={tab === k ? "tab-active" : ""} onClick={() => setTab(k)}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {tab === "checkins" && <CheckInsPanel residentId={resident.id} checkins={resident.checkins} onChange={load} />}
+      {tab === "meetings" && <MeetingsPanel meetings={resident.meetings || []} />}
+      {tab === "medications" && <MedicationsPanel residentId={resident.id} />}
       {tab === "screenings" && (
         <ScreeningsPanel residentId={resident.id} screenings={resident.screenings} onChange={load} />
       )}
       {tab === "notes" && <NotesPanel residentId={resident.id} notes={resident.notes} onChange={load} />}
       {tab === "tasks" && <TasksPanel residentId={resident.id} tasks={resident.tasks} onChange={load} />}
       {tab === "payments" && <PaymentsPanel residentId={resident.id} payments={resident.payments} onChange={load} />}
+    </div>
+  );
+}
+
+function QrBadgeCard({ resident, onChange }: { resident: ResidentDetail; onChange: () => void }) {
+  const { staff } = useAuth();
+  const [busy, setBusy] = useState(false);
+  if (!resident.qr_token) return null;
+
+  async function regenerate() {
+    if (!confirm("Issue a new QR badge? The old printed badge will stop working.")) return;
+    setBusy(true);
+    try {
+      await api.post(`/residents/${resident.id}/qr/regenerate`);
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function printBadge() {
+    const img = document.querySelector<HTMLImageElement>(".qr-badge-card .qr-img");
+    const w = window.open("", "_blank", "width=420,height=560");
+    if (!w || !img) return;
+    const name = `${resident.first_name} ${resident.last_name}`.replace(/[<>&]/g, "");
+    w.document.write(`<!doctype html><title>QR badge</title>
+      <body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;text-align:center;padding:24px">
+      <div style="border:1px dashed #999;border-radius:12px;padding:20px;display:inline-block">
+      <div style="font-size:12px;color:#3f5a42;font-weight:600">Willow Creek Sober Living</div>
+      <img src="${img.src}" width="200" height="200" style="margin:10px 0"/>
+      <div style="font-weight:700;font-size:18px">${name}</div>
+      <div style="font-size:12px;color:#777">Meeting check-in</div></div>
+      <script>onload=()=>{print()}</` + `script></body>`);
+    w.document.close();
+  }
+
+  return (
+    <div className="card qr-badge-card">
+      <div className="card-head-row">
+        <h3>Check-in QR badge</h3>
+        <button className="btn-link small" onClick={printBadge}>
+          Print
+        </button>
+      </div>
+      <div className="qr-badge-body">
+        <QrCode value={badgePayload(resident.qr_token)} size={120} />
+        <div className="muted small">
+          Staff scan this at meetings to record attendance.
+          {staff?.role === "admin" && (
+            <div style={{ marginTop: 8 }}>
+              <button className="btn-link small" disabled={busy} onClick={regenerate}>
+                Lost badge? Issue a new one
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeetingsPanel({ meetings }: { meetings: ResidentDetail["meetings"] }) {
+  const last30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const recent = meetings.filter((m) => m.meeting_date >= last30);
+  return (
+    <div>
+      <p className="muted small">
+        {recent.length} meeting{recent.length === 1 ? "" : "s"} in the last 30 days (
+        {recent.filter((m) => m.meeting_type === "house").length} house,{" "}
+        {recent.filter((m) => m.meeting_type !== "house").length} outside). Check residents in from the{" "}
+        <Link to="/meetings">Meetings</Link> page.
+      </p>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Meeting</th>
+            <th>Type</th>
+            <th>Checked in</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {meetings.map((m) => (
+            <tr key={m.id}>
+              <td>{m.meeting_date}</td>
+              <td>
+                <Link to={`/meetings/${m.meeting_id}`}>{m.title}</Link>
+              </td>
+              <td>{MEETING_TYPES[m.meeting_type] || m.meeting_type}</td>
+              <td>{fmtUtc(m.checked_in_at, { hour: "numeric", minute: "2-digit" })}</td>
+              <td>
+                {m.method === "qr" ? "QR scan" : "manual"}
+                {m.recorded_by_name ? ` · ${m.recorded_by_name}` : ""}
+              </td>
+            </tr>
+          ))}
+          {meetings.length === 0 && (
+            <tr>
+              <td colSpan={5} className="muted">
+                No meeting attendance recorded yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -440,6 +554,14 @@ function PaymentsPanel({
   );
 }
 
+const SPECIMEN_LABELS: Record<string, string> = {
+  urine: "Urine (UA)",
+  saliva: "Saliva",
+  breath: "Breathalyzer",
+  blood: "Blood",
+  hair: "Hair",
+};
+
 function ScreeningsPanel({
   residentId,
   screenings,
@@ -449,6 +571,7 @@ function ScreeningsPanel({
   screenings: ResidentDetail["screenings"];
   onChange: () => void;
 }) {
+  const [specimen, setSpecimen] = useState("urine");
   const [panel, setPanel] = useState("12-panel");
   const [result, setResult] = useState("negative");
   const [substances, setSubstances] = useState("");
@@ -459,6 +582,7 @@ function ScreeningsPanel({
     setSubmitting(true);
     try {
       await api.post(`/residents/${residentId}/screenings`, {
+        specimen_type: specimen,
         panel,
         result,
         substances_flagged: result === "positive" ? substances : null,
@@ -473,6 +597,13 @@ function ScreeningsPanel({
   return (
     <div>
       <form className="inline-form" onSubmit={handleAdd}>
+        <select value={specimen} onChange={(e) => setSpecimen(e.target.value)}>
+          <option value="urine">Urine (UA)</option>
+          <option value="saliva">Saliva / oral swab</option>
+          <option value="breath">Breathalyzer</option>
+          <option value="blood">Blood</option>
+          <option value="hair">Hair</option>
+        </select>
         <input placeholder="Panel (e.g. 12-panel)" value={panel} onChange={(e) => setPanel(e.target.value)} />
         <select value={result} onChange={(e) => setResult(e.target.value)}>
           <option value="negative">Negative</option>
@@ -489,7 +620,7 @@ function ScreeningsPanel({
           />
         )}
         <button type="submit" className="btn-primary" disabled={submitting}>
-          Log screening
+          Log test
         </button>
       </form>
 
@@ -497,6 +628,7 @@ function ScreeningsPanel({
         <thead>
           <tr>
             <th>Date</th>
+            <th>Test</th>
             <th>Panel</th>
             <th>Result</th>
             <th>Flagged substances</th>
@@ -507,6 +639,7 @@ function ScreeningsPanel({
           {screenings.map((s) => (
             <tr key={s.id}>
               <td>{s.test_date}</td>
+              <td>{SPECIMEN_LABELS[s.specimen_type || "urine"] || s.specimen_type}</td>
               <td>{s.panel || "—"}</td>
               <td>
                 <span className={`tag tag-screen-${s.result}`}>{s.result}</span>
@@ -517,8 +650,8 @@ function ScreeningsPanel({
           ))}
           {screenings.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
-                No screenings logged yet.
+              <td colSpan={6} className="muted">
+                No drug tests logged yet.
               </td>
             </tr>
           )}

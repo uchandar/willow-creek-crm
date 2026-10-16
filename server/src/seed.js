@@ -52,4 +52,13 @@ if (customFieldCount === 0) {
   console.log("Custom fields already exist, skipping.");
 }
 
+const seriesCount = db.prepare("SELECT COUNT(*) as n FROM meeting_series").get().n;
+if (seriesCount === 0) {
+  db.prepare(
+    `INSERT INTO meeting_series (title, meeting_type, weekday, start_time, end_time, location, required, start_date)
+     VALUES ('Weekly house meeting', 'house', 0, '19:00', '20:00', 'Living room', 1, date('now'))`
+  ).run();
+  console.log("Created demo standing schedule: Weekly house meeting, Sundays 7pm (required).");
+}
+
 console.log("Seed complete.");

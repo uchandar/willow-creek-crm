@@ -10,6 +10,7 @@ import Tasks from "./pages/Tasks";
 import Settings from "./pages/Settings";
 import AuditLog from "./pages/AuditLog";
 import Meetings from "./pages/Meetings";
+import Calendar from "./pages/Calendar";
 import MeetingDetail from "./pages/MeetingDetail";
 import QrBadges from "./pages/QrBadges";
 import MedPass from "./pages/MedPass";
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="residents/:id" element={<ResidentDetail />} />
         <Route path="rooms" element={<Rooms />} />
         <Route path="tasks" element={<Tasks />} />
+        <Route path="calendar" element={<Calendar />} />
         <Route path="meetings" element={<Meetings />} />
         <Route path="meetings/:id" element={<MeetingDetail />} />
         <Route path="qr-badges" element={<QrBadges />} />

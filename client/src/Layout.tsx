@@ -30,8 +30,11 @@ export default function Layout() {
           <NavLink to="/rooms" className={({ isActive }) => (isActive ? "active" : "")}>
             Rooms &amp; Beds
           </NavLink>
+          <NavLink to="/calendar" className={({ isActive }) => (isActive ? "active" : "")}>
+            Calendar
+          </NavLink>
           <NavLink to="/meetings" className={({ isActive }) => (isActive ? "active" : "")}>
-            Meetings &amp; QR check-in
+            House meetings
           </NavLink>
           <NavLink to="/med-pass" className={({ isActive }) => (isActive ? "active" : "")}>
             Med pass

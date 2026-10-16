@@ -360,3 +360,93 @@ input, select, textarea {
   body { background: #fff; }
   .badge-sheet { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ---- House meetings & calendar ---- */
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.form-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.warn-text { color: var(--warn); }
+.pre { white-space: pre-wrap; }
+.tag-required { background: #f3ecdc; color: #7a5a1e; margin-left: 6px; }
+.tag-big { font-size: 0.75rem; vertical-align: middle; }
+.tag-state-held { background: var(--good-bg); color: var(--good); }
+.tag-state-upcoming { background: #eef1f7; color: #44557a; }
+.tag-state-not_recorded { background: var(--warn-bg); color: var(--warn); }
+.tag-state-cancelled { background: #eee; color: #777; text-decoration: line-through; }
+.required-toggle { display: flex; margin-top: 6px; color: var(--muted); }
+.status-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: -6px 0 16px; }
+.absent-row { align-items: flex-start; }
+.absent-actions { display: flex; gap: 12px; white-space: nowrap; }
+.minutes-card { margin-top: 20px; }
+.minutes-view { display: block; }
+.minutes-view dt { color: var(--muted); font-size: 0.78rem; margin-top: 10px; }
+.minutes-view dd { margin: 2px 0 0; font-size: 0.9rem; }
+.series-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.today-card .plain-list li { align-items: center; }
+.today-empty { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.stat-grid.compact { margin: 0 0 18px; }
+.next-meeting {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  text-decoration: none; color: inherit; margin: 16px 0 0; border-left: 4px solid var(--brand);
+}
+.next-meeting-title { font-weight: 600; font-size: 1rem; margin-top: 2px; }
+
+.cal-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.cal-nav { display: flex; align-items: center; gap: 10px; }
+.cal-title { margin: 0; min-width: 170px; text-align: center; }
+.cal-filters { margin: 0; }
+.cal-month-stats { margin: 8px 0 10px; }
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: var(--border); gap: 1px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+}
+.cal-dow { background: #faf8f5; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 6px 8px; font-weight: 600; }
+.cal-cell { background: var(--panel); min-height: 104px; padding: 4px 5px 6px; display: flex; flex-direction: column; gap: 3px; }
+.cal-outside { background: #fbfaf8; }
+.cal-outside .cal-daynum { color: #c2bbb1; }
+.cal-today { box-shadow: inset 0 0 0 2px var(--brand); }
+.cal-today .cal-daynum { background: var(--brand); color: #fff; border-radius: 999px; padding: 0 6px; }
+.cal-cell-head { display: flex; justify-content: space-between; align-items: center; }
+.cal-daynum { font-size: 0.8rem; font-weight: 600; }
+.cal-add { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1; opacity: 0; padding: 0 2px; }
+.cal-cell:hover .cal-add, .cal-add:focus { opacity: 1; }
+.cal-event {
+  display: flex; align-items: center; gap: 4px; font-size: 0.72rem; line-height: 1.25;
+  padding: 3px 5px; border-radius: 5px; text-decoration: none; color: var(--ink); border-left: 3px solid;
+  overflow: hidden;
+}
+.cal-event-time { color: var(--muted); flex: none; }
+.cal-event-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.cal-event-meta { flex: none; font-weight: 600; display: flex; gap: 3px; align-items: center; }
+.req-star { color: #b8892a; }
+.cal-state-cancelled { opacity: 0.55; text-decoration: line-through; }
+.cal-state-not_recorded .cal-event-meta { color: var(--warn); }
+.cal-state-held .cal-event-meta { color: var(--good); }
+.type-bg-house { background: #e9f1ea; border-color: var(--brand); }
+.type-bg-aa, .type-bg-na, .type-bg-smart, .type-bg-celebrate_recovery { background: #ecf0f8; border-color: #5b6f9a; }
+.type-bg-outing { background: #f6efe2; border-color: #b8892a; }
+.type-bg-other { background: #f1efec; border-color: #9a948b; }
+.type-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #9a948b; }
+.type-house { background: var(--brand); }
+.type-aa, .type-na, .type-smart, .type-celebrate_recovery { background: #5b6f9a; }
+.type-outing { background: #b8892a; }
+.cal-agenda { margin-top: 8px; }
+.agenda-link { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.agenda-date { font-size: 0.78rem; color: var(--muted); }
+.agenda-title { font-weight: 600; color: var(--brand-dark); }
+.agenda-cancelled .agenda-title { text-decoration: line-through; color: var(--muted); }
+.cal-agenda .plain-list li { align-items: center; }
+
+@media (max-width: 760px) {
+  .cal-grid { display: none; }
+  .cal-title { min-width: 0; font-size: 1rem; }
+  .absent-actions { flex-direction: column; gap: 4px; align-items: flex-end; }
+  .next-meeting { flex-direction: column; align-items: flex-start; }
+}
+.plain-list a { color: var(--brand-dark); font-weight: 600; text-decoration: none; }
+.today-card .plain-list a.btn-primary { color: #fff; text-decoration: none; }
+.tag-state-past { background: #f1efec; color: #7a746c; }
+.cal-state-past { opacity: 0.75; }
+a.btn-primary { text-decoration: none; display: inline-block; }
+.head-actions { flex-wrap: nowrap; flex-shrink: 0; }
+.today-card a { color: var(--brand-dark); }
+@media (max-width: 760px) { .head-actions { flex-wrap: wrap; } }

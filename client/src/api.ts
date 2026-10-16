@@ -136,6 +136,16 @@ export type ResidentDetail = Resident & {
   tasks: Task[];
   customFields: Record<string, string>;
   meetings: ResidentMeeting[];
+  missedRequired: Array<{
+    meeting_id: number;
+    title: string;
+    meeting_type: string;
+    meeting_date: string;
+    start_time: string | null;
+    excusal_reason: string | null;
+    excused_by_name: string | null;
+  }>;
+  requiredStats30?: RequiredStats;
 };
 
 export type ResidentMeeting = {
@@ -149,18 +159,57 @@ export type ResidentMeeting = {
   recorded_by_name: string | null;
 };
 
+export type MeetingStatus = "scheduled" | "held" | "cancelled";
+
 export type Meeting = {
   id: number;
   title: string;
   meeting_type: string;
   meeting_date: string;
   start_time: string | null;
+  end_time: string | null;
   location: string | null;
+  required: number;
+  status: MeetingStatus;
+  series_id: number | null;
   created_by_name: string | null;
   attendee_count?: number;
+  has_minutes?: number;
+};
+
+export type MeetingSeries = {
+  id: number;
+  title: string;
+  meeting_type: string;
+  weekday: number;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  required: number;
+  start_date: string;
+  active: number;
+};
+
+export type CalendarData = {
+  from: string;
+  to: string;
+  today: string;
+  activeResidents: number;
+  meetings: Meeting[];
 };
 
 export type MeetingDetail = Meeting & {
+  led_by: string | null;
+  topics: string | null;
+  announcements: string | null;
+  issues: string | null;
+  minutes_notes: string | null;
+  minutes_by_name: string | null;
+  minutes_updated_at: string | null;
+  series_weekday: number | null;
+  absencesCount: boolean;
+  today: string;
+  actionItems: Array<Task & { meeting_id: number }>;
   attendees: Array<{
     id: number;
     resident_id: number;
@@ -170,7 +219,15 @@ export type MeetingDetail = Meeting & {
     checked_in_at: string;
     recorded_by_name: string | null;
   }>;
-  notCheckedIn: Array<{ id: number; first_name: string; last_name: string }>;
+  notCheckedIn: Array<{
+    id: number;
+    first_name: string;
+    last_name: string;
+    status: string;
+    excusal_id: number | null;
+    excusal_reason: string | null;
+    excused_by_name: string | null;
+  }>;
 };
 
 export type AttendanceSummary = {
@@ -185,7 +242,18 @@ export type AttendanceSummary = {
     house: number;
     outside: number;
     last_meeting: string | null;
+    required_total: number;
+    required_attended: number;
+    excused: number;
+    unexcused: number;
   }>;
+};
+
+export type RequiredStats = {
+  required_total: number;
+  required_attended: number;
+  excused: number;
+  unexcused: number;
 };
 
 export type Medication = {
@@ -268,8 +336,48 @@ export const MEETING_TYPES: Record<string, string> = {
   na: "NA",
   smart: "SMART Recovery",
   celebrate_recovery: "Celebrate Recovery",
+  outing: "House outing / event",
   other: "Other",
 };
+
+export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// "19:00" -> "7:00 PM"
+export function fmtTime(t: string | null | undefined) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+// "2026-10-18" -> "Sun, Oct 18"
+export function fmtDate(d: string, opts?: Intl.DateTimeFormatOptions) {
+  const dt = new Date(d + "T12:00:00");
+  return dt.toLocaleDateString(undefined, opts ?? { weekday: "short", month: "short", day: "numeric" });
+}
+
+export function localToday() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+// Display status of a meeting given today's date.
+// Past required meetings with nothing recorded need attention; past optional
+// ones (e.g. an AA meeting nobody logged) are just "past".
+export function meetingState(m: Pick<Meeting, "status" | "meeting_date" | "required">, today: string) {
+  if (m.status === "cancelled") return "cancelled" as const;
+  if (m.status === "held") return "held" as const;
+  if (m.meeting_date < today) return m.required ? ("not_recorded" as const) : ("past" as const);
+  return "upcoming" as const;
+}
+
+export const MEETING_STATE_LABEL = {
+  held: "Held",
+  not_recorded: "Not recorded",
+  past: "No check-ins",
+  cancelled: "Cancelled",
+  upcoming: "Upcoming",
+} as const;
 
 export type DashboardSummary = {
   totalBeds: number;
@@ -283,6 +391,16 @@ export type DashboardSummary = {
   overdueTasks: number;
   pendingScreenings: number;
   dosesOutstanding: number;
+  nextHouseMeeting: {
+    id: number;
+    title: string;
+    meeting_date: string;
+    start_time: string | null;
+    location: string | null;
+    required: number;
+  } | null;
+  unexcusedAbsences7d: number;
+  minutesPending: number;
   missedDosesToday: number;
   pillCountDiscrepancies: number;
   meetingAttendanceToday: number;

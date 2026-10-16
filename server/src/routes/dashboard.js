@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require("../db");
 const { requireAuth } = require("../auth");
 const { houseDayStartUtc, houseToday } = require("../time");
+const { ensureOccurrences, requiredStats, addDays } = require("../meetingSchedule");
 
 router.use(requireAuth);
 
@@ -78,7 +79,33 @@ router.get("/", (req, res) => {
     )
     .get(houseToday()).n;
 
+  const htoday = houseToday();
+  ensureOccurrences(addDays(htoday, -7), addDays(htoday, 14));
+  const nextHouseMeeting =
+    db
+      .prepare(
+        `SELECT id, title, meeting_date, start_time, location, required FROM meetings
+         WHERE meeting_type = 'house' AND status <> 'cancelled' AND meeting_date >= ?
+           AND NOT (status = 'held' AND meeting_date = ?)
+         ORDER BY meeting_date, start_time LIMIT 1`
+      )
+      .get(htoday, htoday) || null;
+  const unexcusedAbsences7d = requiredStats(addDays(htoday, -6), htoday).reduce((n, r) => n + r.unexcused, 0);
+  // House meetings in the last 30 days that still need attention: held without
+  // minutes, or past and never recorded (no check-ins, not cancelled).
+  const minutesPending = db
+    .prepare(
+      `SELECT COUNT(*) as n FROM meetings
+       WHERE meeting_type = 'house' AND meeting_date >= ? AND meeting_date < ?
+         AND ((status = 'held' AND led_by IS NULL AND topics IS NULL AND minutes_notes IS NULL)
+              OR status = 'scheduled')`
+    )
+    .get(addDays(htoday, -30), htoday).n;
+
   res.json({
+    nextHouseMeeting,
+    unexcusedAbsences7d,
+    minutesPending,
     dosesOutstanding,
     missedDosesToday,
     pillCountDiscrepancies,

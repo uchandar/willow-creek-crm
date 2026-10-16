@@ -162,6 +162,34 @@ CREATE TABLE IF NOT EXISTS meeting_attendance (
   UNIQUE(meeting_id, resident_id)
 );
 
+-- Standing (recurring weekly) meeting schedule, e.g. "House meeting, Sundays 7pm".
+-- Occurrences are materialized into meetings as the calendar is viewed.
+CREATE TABLE IF NOT EXISTS meeting_series (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  meeting_type TEXT NOT NULL DEFAULT 'house',
+  weekday INTEGER NOT NULL,          -- 0 = Sunday ... 6 = Saturday
+  start_time TEXT,                   -- "19:00"
+  end_time TEXT,
+  location TEXT,
+  required INTEGER NOT NULL DEFAULT 1,
+  start_date TEXT NOT NULL DEFAULT (date('now')),
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES staff(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Excused / unexcused absences from required meetings.
+CREATE TABLE IF NOT EXISTS meeting_excusals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  resident_id INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
+  reason TEXT,
+  recorded_by INTEGER REFERENCES staff(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(meeting_id, resident_id)
+);
+
 -- Medications: prescription list, dose log (MAR-style), pill counts.
 CREATE TABLE IF NOT EXISTS medications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,6 +248,22 @@ function addColumnIfMissing(table, column, definition) {
 }
 addColumnIfMissing("residents", "qr_token", "TEXT");
 addColumnIfMissing("drug_screenings", "specimen_type", "TEXT NOT NULL DEFAULT 'urine'");
+// House meeting records: schedule link, required flag, status and minutes.
+addColumnIfMissing("meetings", "series_id", "INTEGER REFERENCES meeting_series(id) ON DELETE SET NULL");
+addColumnIfMissing("meetings", "required", "INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing("meetings", "end_time", "TEXT");
+addColumnIfMissing("meetings", "status", "TEXT NOT NULL DEFAULT 'scheduled'"); // scheduled | held | cancelled
+addColumnIfMissing("meetings", "led_by", "TEXT");
+addColumnIfMissing("meetings", "topics", "TEXT");
+addColumnIfMissing("meetings", "announcements", "TEXT");
+addColumnIfMissing("meetings", "issues", "TEXT");
+addColumnIfMissing("meetings", "minutes_notes", "TEXT");
+addColumnIfMissing("meetings", "minutes_by", "INTEGER REFERENCES staff(id)");
+addColumnIfMissing("meetings", "minutes_updated_at", "TEXT");
+addColumnIfMissing("tasks", "meeting_id", "INTEGER REFERENCES meetings(id) ON DELETE SET NULL");
+db.exec(
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_series_date ON meetings(series_id, meeting_date) WHERE series_id IS NOT NULL"
+);
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_residents_qr_token ON residents(qr_token)");
 
 // Every resident gets an opaque QR token (no name or PHI encoded in the badge).
